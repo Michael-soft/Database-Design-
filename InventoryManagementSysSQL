@@ -1,0 +1,134 @@
+-- 1. Creation of entities
+CREATE TYPE size_enum AS ENUM ('small', 'medium', 'large');
+
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'user')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE categories (
+    category_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE items (
+    item_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    size size_enum NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    category_id INTEGER REFERENCES categories(category_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+    order_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE order_items (
+    order_item_id SERIAL PRIMARY KEY,
+    order_id INTEGER REFERENCES orders(order_id),
+    item_id INTEGER REFERENCES items(item_id),
+    quantity INTEGER NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Inserting records
+-- Insert users
+INSERT INTO users (username, email, password_hash, role)
+VALUES 
+('admin1', 'admin1@example.com', 'hashed_password_1', 'admin'),
+('user1', 'user1@example.com', 'hashed_password_2', 'user');
+
+-- Insert categories
+INSERT INTO categories (name, description)
+VALUES 
+('Electronics', 'Electronic devices and accessories'),
+('Furniture', 'Home and office furniture');
+
+-- Insert items
+INSERT INTO items (name, price, size, quantity, description, category_id)
+VALUES 
+('Laptop', 999.99, 'medium', 10, 'High-performance laptop', 1),
+('Office Chair', 199.99, 'large', 20, 'Ergonomic office chair', 2);
+
+-- Insert orders and order items
+INSERT INTO orders (user_id, status)
+VALUES (2, 'pending');
+
+INSERT INTO order_items (order_id, item_id, quantity, unit_price)
+VALUES 
+(1, 1, 1, 999.99),
+(1, 2, 2, 199.99);
+
+-- 3. Getting records from multiple entities
+-- Get all items with their categories
+SELECT i.*, c.name as category_name
+FROM items i
+JOIN categories c ON i.category_id = c.category_id;
+
+-- Get all orders with user information
+SELECT o.*, u.username, u.email
+FROM orders o
+JOIN users u ON o.user_id = u.user_id;
+
+-- 4. Updating records from multiple entities
+-- Update item price and category
+BEGIN;
+UPDATE items 
+SET price = 899.99 
+WHERE item_id = 1;
+
+UPDATE categories 
+SET description = 'Updated electronics description' 
+WHERE category_id = 1;
+COMMIT;
+
+-- 5. Deleting records from multiple entities
+-- Delete order and its items
+BEGIN;
+DELETE FROM order_items WHERE order_id = 1;
+DELETE FROM orders WHERE order_id = 1;
+COMMIT;
+
+-- 6. Query records using joins
+-- Get complete order details
+SELECT 
+    o.order_id,
+    u.username,
+    i.name as item_name,
+    oi.quantity,
+    oi.unit_price,
+    (oi.quantity * oi.unit_price) as total_price,
+    c.name as category_name
+FROM orders o
+JOIN users u ON o.user_id = u.user_id
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN items i ON oi.item_id = i.item_id
+JOIN categories c ON i.category_id = c.category_id;
+
+-- Get inventory status by category
+SELECT 
+    c.name as category_name,
+    COUNT(i.item_id) as total_items,
+    SUM(i.quantity) as total_quantity,
+    SUM(i.quantity * i.price) as total_value
+FROM categories c
+LEFT JOIN items i ON c.category_id = i.category_id
+GROUP BY c.category_id, c.name;

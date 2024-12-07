@@ -1,0 +1,224 @@
+// 1. Creation of entities (Collections)
+// 2. Inserting records
+// Insert users
+db.users.insertMany([
+  {
+    username: "admin1",
+    email: "admin1@example.com",
+    password_hash: "hashed_password_1",
+    role: "admin",
+    created_at: new Date(),
+    updated_at: new Date()
+  },
+  {
+    username: "user1",
+    email: "user1@example.com",
+    password_hash: "hashed_password_2",
+    role: "user",
+    created_at: new Date(),
+    updated_at: new Date()
+  }
+]);
+
+// Insert categories
+db.categories.insertMany([
+  {
+    name: "Electronics",
+    description: "Electronic devices and accessories",
+    created_at: new Date(),
+    updated_at: new Date()
+  },
+  {
+    name: "Furniture",
+    description: "Home and office furniture",
+    created_at: new Date(),
+    updated_at: new Date()
+  }
+]);
+
+// Insert items
+db.items.insertMany([
+  {
+    name: "Laptop",
+    price: 999.99,
+    size: "medium",
+    quantity: 10,
+    description: "High-performance laptop",
+    category_id: ObjectId("category_id_1"),
+    created_at: new Date(),
+    updated_at: new Date()
+  },
+  {
+    name: "Office Chair",
+    price: 199.99,
+    size: "large",
+    quantity: 20,
+    description: "Ergonomic office chair",
+    category_id: ObjectId("category_id_2"),
+    created_at: new Date(),
+    updated_at: new Date()
+  }
+]);
+
+// Insert orders
+db.orders.insertOne({
+  user_id: ObjectId("user_id_1"),
+  order_date: new Date(),
+  status: "pending",
+  items: [
+    {
+      item_id: ObjectId("item_id_1"),
+      quantity: 1,
+      unit_price: 999.99
+    },
+    {
+      item_id: ObjectId("item_id_2"),
+      quantity: 2,
+      unit_price: 199.99
+    }
+  ],
+  created_at: new Date(),
+  updated_at: new Date()
+});
+
+// 3. Getting records from multiple entities
+// Get all items with their categories
+db.items.aggregate([
+  {
+    $lookup: {
+      from: "categories",
+      localField: "category_id",
+      foreignField: "_id",
+      as: "category"
+    }
+  },
+  {
+    $unwind: "$category"
+  }
+]);
+
+// Get all orders with user information
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "user_id",
+      foreignField: "_id",
+      as: "user"
+    }
+  },
+  {
+    $unwind: "$user"
+  }
+]);
+
+// 4. Updating records from multiple entities
+// Update item price and related orders
+db.items.updateOne(
+  { _id: ObjectId("item_id_1") },
+  { 
+    $set: { 
+      price: 899.99,
+      updated_at: new Date()
+    }
+  }
+);
+
+db.orders.updateMany(
+  { "items.item_id": ObjectId("item_id_1") },
+  { 
+    $set: { 
+      "items.$.unit_price": 899.99,
+      updated_at: new Date()
+    }
+  }
+);
+
+// 5. Deleting records from multiple entities
+// Delete order and update item quantities
+db.orders.findOne({ _id: ObjectId("order_id_1") }).items.forEach(item => {
+  db.items.updateOne(
+    { _id: item.item_id },
+    { $inc: { quantity: item.quantity } }
+  );
+});
+
+db.orders.deleteOne({ _id: ObjectId("order_id_1") });
+
+// 6. Query records using lookup (joins)
+// Get complete order details with items and categories
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "user_id",
+      foreignField: "_id",
+      as: "user"
+    }
+  },
+  {
+    $unwind: "$user"
+  },
+  {
+    $unwind: "$items"
+  },
+  {
+    $lookup: {
+      from: "items",
+      localField: "items.item_id",
+      foreignField: "_id",
+      as: "item_details"
+    }
+  },
+  {
+    $unwind: "$item_details"
+  },
+  {
+    $lookup: {
+      from: "categories",
+      localField: "item_details.category_id",
+      foreignField: "_id",
+      as: "category"
+    }
+  },
+  {
+    $unwind: "$category"
+  },
+  {
+    $project: {
+      order_id: "$_id",
+      username: "$user.username",
+      item_name: "$item_details.name",
+      quantity: "$items.quantity",
+      unit_price: "$items.unit_price",
+      total_price: { $multiply: ["$items.quantity", "$items.unit_price"] },
+      category_name: "$category.name",
+      status: "$status",
+      order_date: "$order_date"
+    }
+  }
+]);
+
+// Get inventory status by category
+db.items.aggregate([
+  {
+    $lookup: {
+      from: "categories",
+      localField: "category_id",
+      foreignField: "_id",
+      as: "category"
+    }
+  },
+  {
+    $unwind: "$category"
+  },
+  {
+    $group: {
+      _id: "$category._id",
+      category_name: { $first: "$category.name" },
+      total_items: { $sum: 1 },
+      total_quantity: { $sum: "$quantity" },
+      total_value: { $sum: { $multiply: ["$quantity", "$price"] } }
+    }
+  }
+]);
